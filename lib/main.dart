@@ -1,7 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:mqtt_client/mqtt_browser_client.dart';
-import 'package:mqtt_client/mqtt_client.dart';
+import 'package:mqtt_client/mqtt_client.dart' as mqtt;
 import 'package:mqtt_client/mqtt_server_client.dart';
+
 import 'package:typed_data/typed_buffers.dart';
 
 void main() {
@@ -28,14 +30,13 @@ class MyHomePage extends StatefulWidget {
 }
 
 class MyHomePageState extends State<MyHomePage> {
-  MqttServerClient? _client;
-
+  final MqttServerClient _client =
+      MqttServerClient('test.mosquitto.org', 'my_client_id');
   String _topic = '';
   String _message = '';
   String _publishedMessage = '';
-  final String broker = 'broker.hivemq.com';
-  final String clientId = 'flutter_client';
-  bool _isConnected = false;
+  Uint8Buffer myBuffer = Uint8Buffer(); // Creates an empty buffer
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -97,48 +98,35 @@ class MyHomePageState extends State<MyHomePage> {
 
   void _connect() async {
     try {
-      _client = MqttServerClient.withPort(
-          broker, clientId, maxConnectionAttempts: 5, 8883);
-      _client!.logging(on: true);
-
-      await _client!.connect();
-      _client!.onConnected = _onConnected;
-      _client!.onDisconnected = _onDisconnected;
-      debugPrint('Connected to broker');
+      await _client.connect();
+      print('Connected to broker');
     } catch (e) {
-      debugPrint('Error connecting to broker: $e');
+      print('Error connecting to broker: $e');
     }
-  }
-
-  void _onConnected() {
-    debugPrint('Connected to MQTT broker');
-    setState(() {
-      _isConnected = true;
-    });
-
-    // Subscribe to topics or perform other actions here
-  }
-
-  void _onDisconnected() {
-    _isConnected = false;
-    debugPrint('Disconnected from MQTT broker');
   }
 
   void _subscribe() {
     if (_topic.isNotEmpty) {
-      if (_isConnected) {
-        _client!.subscribe(_topic, MqttQos.atLeastOnce);
-      }
+      _client.subscribe(_topic, mqtt.MqttQos.atLeastOnce);
     }
   }
 
   void _publish() {
     if (_message.isNotEmpty) {
-      _client!.publishMessage(_topic, MqttQos.atLeastOnce,
-          (MqttClientPayloadBuilder()..addString(_message)) as Uint8Buffer);
-      setState(() {
-        _publishedMessage = _message;
-      });
+      if (_client.connectionStatus!.state ==
+          mqtt.MqttConnectionState.connected) {
+        debugPrint('publishing Message');
+        (myBuffer.addAll(utf8.encode(_message)));
+        _client.publishMessage(
+          _topic,
+          mqtt.MqttQos.atLeastOnce,
+          myBuffer,
+        );
+        debugPrint('Message Published');
+        setState(() {
+          _publishedMessage = _message;
+        });
+      }
     }
   }
 }
